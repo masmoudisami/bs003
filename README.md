@@ -7,7 +7,7 @@ Sur un nouveau serveur :
 
 git clone https://github.com/masmoudisami/bs003.git
 
-cd bs001
+cd bs003
 
 docker compose up -d --build
 
