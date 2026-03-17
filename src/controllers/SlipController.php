@@ -55,7 +55,18 @@ class SlipController
             exit;
         }
         
+        // === IMPORTANT : Récupérer les lignes AVEC les fichiers ===
         $lines = $this->model->getLines($id);
+        
+        // Debug pour vérifier que les fichiers sont récupérés
+        error_log("=== EDIT DEBUG ===");
+        error_log("Slip ID: $id");
+        error_log("Lines count: " . count($lines));
+        foreach ($lines as $line) {
+            error_log("Line ID: " . $line['id'] . " - fichier_path: " . ($line['fichier_path'] ?? 'NULL'));
+        }
+        error_log("=== END EDIT DEBUG ===");
+        
         $slips = $this->model->getAllFiltered(null, null, null, null);
         $patients = $this->patientModel->getAll();
         $doctors = $this->doctorModel->getAll();
@@ -68,55 +79,108 @@ class SlipController
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $lines_data = [];
             $total = 0.0;
+            $upload_count = 0;
             
+            // Configuration du dossier d'upload
             $upload_dir = __DIR__ . '/../uploads/';
             if (!is_dir($upload_dir)) {
                 mkdir($upload_dir, 0777, true);
             }
             
+            // Debug upload
+            error_log("=== UPLOAD DEBUG START ===");
+            error_log("POST lines count: " . count($_POST['lines'] ?? []));
+            error_log("FILES exists: " . (isset($_FILES['lines']) ? 'YES' : 'NO'));
+            
+            if (isset($_FILES['lines'])) {
+                foreach ($_FILES['lines']['name'] as $idx => $names) {
+                    $file_name = $names['fichier'] ?? 'NO_FILE';
+                    $file_error = $_FILES['lines']['error'][$idx]['fichier'] ?? 'NO_ERROR';
+                    error_log("Line $idx: file=$file_name, error=$file_error");
+                }
+            }
+            error_log("=== UPLOAD DEBUG END ===");
+            
+            // === TRAITEMENT DES LIGNES ET FICHIERS ===
             if (isset($_POST['lines']) && is_array($_POST['lines'])) {
                 foreach ($_POST['lines'] as $i => $line) {
+                    // Vérifier que la ligne a un type d'intervention
+                    if (empty($line['intervention_type_id'])) {
+                        error_log("Line $i: SKIP - no intervention_type_id");
+                        continue;
+                    }
+                    
+                    // Récupérer et valider le montant
                     $montant = (float)str_replace(',', '.', $line['montant']);
                     $total += $montant;
                     
                     $file_path = null;
                     
+                    // === TRAITEMENT DU FICHIER POUR CETTE LIGNE ===
                     if (isset($_FILES['lines']) && 
-                        isset($_FILES['lines']['name'][$i]['fichier']) && 
-                        $_FILES['lines']['name'][$i]['fichier'] !== '') {
+                        isset($_FILES['lines']['error'][$i]['fichier'])) {
                         
-                        $file_tmp = $_FILES['lines']['tmp_name'][$i]['fichier'];
-                        $file_name = $_FILES['lines']['name'][$i]['fichier'];
                         $file_error = $_FILES['lines']['error'][$i]['fichier'];
+                        $file_name = $_FILES['lines']['name'][$i]['fichier'] ?? '';
                         
+                        error_log("Line $i: Processing file - name=$file_name, error=$file_error");
+                        
+                        // UPLOAD_ERR_OK = 0 signifie upload réussi
                         if ($file_error === UPLOAD_ERR_OK) {
-                            $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
-                            $new_file_name = uniqid() . '_' . time() . '.' . $file_ext;
-                            $destination = $upload_dir . $new_file_name;
-                            
-                            $allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png'];
-                            if (in_array($file_ext, $allowed_extensions)) {
-                                if (move_uploaded_file($file_tmp, $destination)) {
-                                    $file_path = $new_file_name;
+                            if (!empty($file_name)) {
+                                $file_tmp = $_FILES['lines']['tmp_name'][$i]['fichier'];
+                                $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
+                                $allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png'];
+                                
+                                if (in_array($file_ext, $allowed_extensions)) {
+                                    // === NOM UNIQUE AVEC INDEX POUR ÉVITER ÉCRASEMENT ===
+                                    $new_file_name = 'doc_' . uniqid() . '_' . time() . '_' . $i . '.' . $file_ext;
+                                    $destination = $upload_dir . $new_file_name;
+                                    
+                                    if (move_uploaded_file($file_tmp, $destination)) {
+                                        $file_path = $new_file_name;
+                                        $upload_count++;
+                                        error_log("Line $i: File uploaded successfully - $new_file_name");
+                                    } else {
+                                        error_log("Line $i: move_uploaded_file FAILED - $new_file_name");
+                                    }
+                                } else {
+                                    error_log("Line $i: Extension not allowed - $file_ext");
                                 }
+                            } else {
+                                error_log("Line $i: Empty file name");
                             }
+                        } else {
+                            error_log("Line $i: Upload error code - $file_error");
                         }
+                    } else {
+                        error_log("Line $i: No file in \$_FILES or error key missing");
                     }
-
+                    // === FIN TRAITEMENT FICHIER ===
+                    
+                    // Ajouter la ligne avec SON propre fichier
                     $lines_data[] = [
                         'intervention_type_id' => (int)$line['intervention_type_id'],
                         'montant' => $montant,
                         'fichier_path' => $file_path
                     ];
+                    
+                    error_log("Line $i: Added to lines_data with fichier_path=" . ($file_path ?? 'NULL'));
                 }
             }
+            
+            error_log("Total lines processed: " . count($lines_data));
+            error_log("Total files uploaded: $upload_count");
+            error_log("=== END STORE ===");
 
+            // Validation : Au moins une ligne requise
             if (empty($lines_data)) {
                 $_SESSION['error'] = "Au moins une ligne d'intervention est requise";
                 header('Location: index.php?controller=slip&action=create');
                 exit;
             }
 
+            // Récupérer et valider le numéro de bulletin
             $numero_bulletin = isset($_POST['numero_bulletin']) ? trim($_POST['numero_bulletin']) : '';
             
             if (empty($numero_bulletin)) {
@@ -125,6 +189,7 @@ class SlipController
                 exit;
             }
 
+            // Valider patient et médecin
             $patient_id = isset($_POST['patient_id']) ? (int)$_POST['patient_id'] : 0;
             $doctor_id = isset($_POST['doctor_id']) ? (int)$_POST['doctor_id'] : 0;
             
@@ -140,6 +205,7 @@ class SlipController
                 exit;
             }
 
+            // Valider la date des soins
             $date_soins = $_POST['date_soins'] ?? '';
             if (empty($date_soins)) {
                 $_SESSION['error'] = "La date des soins est obligatoire";
@@ -147,9 +213,11 @@ class SlipController
                 exit;
             }
 
+            // Le montant déboursé est égal au total des lignes
             $montant_debourse = $total;
             $montant_rembourse = isset($_POST['montant_rembourse']) ? (float)str_replace(',', '.', $_POST['montant_rembourse']) : 0.0;
 
+            // === CRÉER $data AVANT le if/else (CORRECTION IMPORTANTE) ===
             $data = [
                 'numero_bulletin' => $numero_bulletin,
                 'patient_id' => $patient_id,
@@ -164,32 +232,41 @@ class SlipController
             ];
 
             try {
+                // === MODIFICATION : Conserver les anciens fichiers par INDEX ===
                 if (isset($_POST['id']) && (int)$_POST['id'] > 0) {
                     $old_lines = $this->model->getLines((int)$_POST['id']);
+                    
+                    // Créer un tableau des anciens fichiers par INDEX de ligne
                     $existing_files = [];
-                    foreach ($old_lines as $old_line) {
+                    foreach ($old_lines as $idx => $old_line) {
                         if (!empty($old_line['fichier_path'])) {
-                            $existing_files[$old_line['intervention_type_id']] = $old_line['fichier_path'];
+                            $existing_files[$idx] = $old_line['fichier_path'];
                         }
                     }
                     
-                    foreach ($lines_data as &$line_data) {
+                    // Conserver les anciens fichiers si aucun nouveau fichier n'est uploadé pour cette ligne
+                    foreach ($lines_data as $idx => &$line_data) {
                         if (empty($line_data['fichier_path']) && 
-                            isset($existing_files[$line_data['intervention_type_id']])) {
-                            $line_data['fichier_path'] = $existing_files[$line_data['intervention_type_id']];
+                            isset($existing_files[$idx])) {
+                            $line_data['fichier_path'] = $existing_files[$idx];
+                            error_log("Line $idx: Keeping old file - " . $existing_files[$idx]);
                         }
                     }
+                    
+                    // Mettre à jour $data['lines'] avec les fichiers conservés
+                    $data['lines'] = $lines_data;
                     
                     $this->model->update((int)$_POST['id'], $data);
-                    $_SESSION['success'] = "Bulletin modifié avec succès";
+                    $_SESSION['success'] = "Bulletin modifié avec succès - $upload_count nouveau(x) fichier(s)";
                 } else {
+                    // Création : vérifier l'unicité du numéro de bulletin
                     if ($this->model->exists($numero_bulletin)) {
                         $_SESSION['error'] = "Ce numéro de bulletin existe déjà";
                         header('Location: index.php?controller=slip&action=create');
                         exit;
                     }
                     $this->model->create($data);
-                    $_SESSION['success'] = "Bulletin créé avec succès";
+                    $_SESSION['success'] = "Bulletin créé avec succès - $upload_count fichier(s) uploadé(s)";
                 }
             } catch (\Exception $e) {
                 $_SESSION['error'] = "Erreur : " . $e->getMessage();
@@ -207,6 +284,7 @@ class SlipController
         if ($id) {
             $slip = $this->model->getById($id);
             if ($slip) {
+                // Supprimer les fichiers associés
                 $lines = $this->model->getLines($id);
                 $upload_dir = __DIR__ . '/../uploads/';
                 foreach ($lines as $line) {
@@ -255,6 +333,7 @@ class SlipController
             exit;
         }
         
+        // Sécurité : empêcher les attaques par chemin relatif
         $file = basename($file);
         $upload_dir = __DIR__ . '/../uploads/';
         $file_path = $upload_dir . $file;
