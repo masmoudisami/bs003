@@ -75,10 +75,12 @@ class Slip
 
     public function getLines(int $slip_id): array
     {
+        // === IMPORTANT : Inclure fichier_path dans le SELECT ===
         $stmt = $this->db->prepare("SELECT sl.*, it.libelle 
                                     FROM slip_lines sl 
                                     JOIN intervention_types it ON sl.intervention_type_id = it.id 
-                                    WHERE sl.slip_id = ?");
+                                    WHERE sl.slip_id = ?
+                                    ORDER BY sl.id");
         $stmt->execute([$slip_id]);
         return $stmt->fetchAll();
     }
@@ -115,7 +117,7 @@ class Slip
                     $slip_id, 
                     $line['intervention_type_id'], 
                     $line['montant'], 
-                    $line['fichier_path']  // Le chemin du fichier est sauvegardé ici
+                    $line['fichier_path']
                 ]);
             }
 
@@ -149,14 +151,14 @@ class Slip
             $stmt_del = $this->db->prepare("DELETE FROM slip_lines WHERE slip_id = ?");
             $stmt_del->execute([$id]);
 
-            // Insérer les nouvelles lignes avec les fichiers
+            // Insérer les nouvelles lignes avec les fichiers (conservés ou nouveaux)
             foreach ($data['lines'] as $line) {
                 $stmt_line = $this->db->prepare("INSERT INTO slip_lines (slip_id, intervention_type_id, montant, fichier_path) VALUES (?, ?, ?, ?)");
                 $stmt_line->execute([
                     $id, 
                     $line['intervention_type_id'], 
                     $line['montant'], 
-                    $line['fichier_path']  // Le chemin du fichier est sauvegardé ici
+                    $line['fichier_path']
                 ]);
             }
 
