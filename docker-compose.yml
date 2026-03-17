@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+
+  web:
+    build: .
+    container_name: php_app_bs
+    restart: always
+    ports:
+      - "8083:80"
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      APP_URL: http://localhost:8080
+    volumes:
+      - ./src:/var/www/html
+    networks:
+      - app_network_bs
+
+  db:
+    image: mysql:8.0
+    container_name: mysql_db_bs
+    restart: always
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app_network_bs
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin_bs
+    restart: always
+    ports:
+      - "8082:80"
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      # Mode login manuel : permet de se connecter en root ou en sami
+      PMA_ABSOLUTE_URI: http://localhost:8082/
+    depends_on:
+      - db
+    networks:
+      - app_network_bs
+
+volumes:
+  db_data:
+
+networks:
+  app_network_bs:
