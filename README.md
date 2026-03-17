@@ -5,7 +5,7 @@
 
 Sur un nouveau serveur :
 
-git clone https://github.com/masmoudisami/bs001.git
+git clone https://github.com/masmoudisami/bs003.git
 
 cd bs001
 
