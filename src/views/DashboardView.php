@@ -94,7 +94,9 @@
             <a href="index.php?controller=patient&action=index" class="btn btn-blue">👥 Patients</a>
             <a href="index.php?controller=doctor&action=index" class="btn btn-blue">👨‍⚕️ Médecins</a>
             <a href="index.php?controller=intervention&action=index" class="btn btn-blue">💉 Types Intervention</a>
-            <a href="index.php?controller=dashboard&action=exportCsv&<?= http_build_query($_GET) ?>" class="btn btn-export">📊 Export CSV</a>
+    
+            <!-- === LIEN EXPORT CSV CORRIGÉ === -->
+            <a href="index.php?controller=dashboard&action=exportCsv" class="btn btn-export">📊 Export CSV</a>
             <button onclick="window.print()" class="btn btn-export">🖨️ Export PDF</button>
         </div>
 
