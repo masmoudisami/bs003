@@ -26,7 +26,8 @@ class SlipController
 
     public function index(): void
     {
-        $slips = $this->model->getAllFiltered(null, null, null, null);
+        // Utilisation de la nouvelle signature avec 6 paramètres
+        $slips = $this->model->getAllFiltered(null, null, null, null, null, false);
         $patients = $this->patientModel->getAll();
         $doctors = $this->doctorModel->getAll();
         $interventions = $this->interventionModel->getAll();
@@ -37,7 +38,7 @@ class SlipController
     {
         $slip = null;
         $lines = [];
-        $slips = $this->model->getAllFiltered(null, null, null, null);
+        $slips = $this->model->getAllFiltered(null, null, null, null, null, false);
         $patients = $this->patientModel->getAll();
         $doctors = $this->doctorModel->getAll();
         $interventions = $this->interventionModel->getAll();
@@ -55,19 +56,8 @@ class SlipController
             exit;
         }
         
-        // === IMPORTANT : Récupérer les lignes AVEC les fichiers ===
         $lines = $this->model->getLines($id);
-        
-        // Debug pour vérifier que les fichiers sont récupérés
-        error_log("=== EDIT DEBUG ===");
-        error_log("Slip ID: $id");
-        error_log("Lines count: " . count($lines));
-        foreach ($lines as $line) {
-            error_log("Line ID: " . $line['id'] . " - fichier_path: " . ($line['fichier_path'] ?? 'NULL'));
-        }
-        error_log("=== END EDIT DEBUG ===");
-        
-        $slips = $this->model->getAllFiltered(null, null, null, null);
+        $slips = $this->model->getAllFiltered(null, null, null, null, null, false);
         $patients = $this->patientModel->getAll();
         $doctors = $this->doctorModel->getAll();
         $interventions = $this->interventionModel->getAll();
@@ -217,7 +207,7 @@ class SlipController
             $montant_debourse = $total;
             $montant_rembourse = isset($_POST['montant_rembourse']) ? (float)str_replace(',', '.', $_POST['montant_rembourse']) : 0.0;
 
-            // === CRÉER $data AVANT le if/else (CORRECTION IMPORTANTE) ===
+            // === CRÉER $data AVANT le if/else ===
             $data = [
                 'numero_bulletin' => $numero_bulletin,
                 'patient_id' => $patient_id,
@@ -366,15 +356,36 @@ class SlipController
 
     public function exportCsv(): void
     {
-        $slips = $this->model->getAllFiltered(null, null, null, null);
+        // Vérifier l'authentification
+        AuthController::requireLogin();
         
+        // Récupérer les bulletins (avec la nouvelle signature à 6 paramètres)
+        $slips = $this->model->getAllFiltered(null, null, null, null, null, false);
+        
+        // Vérifier qu'il y a des données
+        if (empty($slips)) {
+            $_SESSION['error'] = "Aucune donnée à exporter";
+            header('Location: index.php?controller=dashboard&action=index');
+            exit;
+        }
+        
+        // Nom du fichier avec date et heure
+        $filename = 'bulletins_soins_' . date('Y-m-d_H-i-s') . '.csv';
+        
+        // === EN-TÊTES HTTP (DOIVENT ÊTRE AVANT TOUT OUTPUT) ===
         header('Content-Type: text/csv; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="bulletins_soins.csv"');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
         
+        // Ouvrir la sortie
         $output = fopen('php://output', 'w');
         
+        // Ajouter le BOM pour Excel (reconnaissance UTF-8)
         fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
         
+        // En-têtes de colonnes (séparateur point-virgule pour Excel français)
         fputcsv($output, [
             'N° Bulletin',
             'Patient',
@@ -382,23 +393,29 @@ class SlipController
             'Date Soins',
             'Date Remboursement',
             'Total (TND)',
-            'Montant Déboursé (TND)',
-            'Montant Remboursé (TND)',
+            'Déboursé (TND)',
+            'Remboursé (TND)',
             'Solde (TND)'
         ], ';');
-
-        foreach ($slips as $s) {
-            $solde = (float)$s['montant_debourse'] - (float)$s['montant_rembourse'];
+        
+        // Données
+        foreach ($slips as $slip) {
+            $solde = (float)$slip['montant_debourse'] - (float)$slip['montant_rembourse'];
+            
+            // Formater les dates pour Excel (JJ/MM/AAAA)
+            $date_soins = !empty($slip['date_soins']) ? date('d/m/Y', strtotime($slip['date_soins'])) : '';
+            $date_remb = !empty($slip['date_remboursement']) ? date('d/m/Y', strtotime($slip['date_remboursement'])) : '';
+            
             fputcsv($output, [
-                $s['numero_bulletin'],
-                $s['patient_nom'],
-                $s['doctor_nom'],
-                $s['date_soins'],
-                $s['date_remboursement'] ?? '',
-                number_format((float)$s['total'], 3, '.', ' '),
-                number_format((float)$s['montant_debourse'], 3, '.', ' '),
-                number_format((float)$s['montant_rembourse'], 3, '.', ' '),
-                number_format($solde, 3, '.', ' ')
+                $slip['numero_bulletin'],
+                $slip['patient_nom'],
+                $slip['doctor_nom'],
+                $date_soins,
+                $date_remb,
+                str_replace('.', ',', number_format((float)$slip['total'], 3, '.', '')),
+                str_replace('.', ',', number_format((float)$slip['montant_debourse'], 3, '.', '')),
+                str_replace('.', ',', number_format((float)$slip['montant_rembourse'], 3, '.', '')),
+                str_replace('.', ',', number_format($solde, 3, '.', ''))
             ], ';');
         }
         
@@ -408,7 +425,7 @@ class SlipController
 
     public function exportPdf(): void
     {
-        $slips = $this->model->getAllFiltered(null, null, null, null);
+        $slips = $this->model->getAllFiltered(null, null, null, null, null, false);
         $patients = $this->patientModel->getAll();
         $doctors = $this->doctorModel->getAll();
         $interventions = $this->interventionModel->getAll();

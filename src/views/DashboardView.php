@@ -9,6 +9,7 @@
         h1 { color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
         .filters { margin-bottom: 20px; padding: 15px; background: #eee; border-radius: 5px; }
         .filters input, .filters select, .filters button { margin: 5px; padding: 8px; }
+        .filters .date-range { display: flex; gap: 10px; align-items: center; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         th { background: #333; color: #fff; cursor: pointer; }
@@ -18,7 +19,7 @@
         .actions a { margin-right: 10px; text-decoration: none; display: inline-block; }
         .actions a:hover { text-decoration: underline; }
         .shortcuts { margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px; }
-        .btn { padding: 10px 15px; background: #28a745; color: #fff; text-decoration: none; border-radius: 4px; display: inline-block; }
+        .btn { padding: 10px 15px; background: #28a745; color: #fff; text-decoration: none; border-radius: 4px; display: inline-block; border: none; cursor: pointer; }
         .btn:hover { background: #218838; }
         .btn-blue { background: #007bff; }
         .btn-blue:hover { background: #0056b3; }
@@ -26,11 +27,15 @@
         .btn-export:hover { background: #138496; }
         .btn-danger { background: #dc3545; }
         .btn-danger:hover { background: #c82333; }
+        .btn-warning { background: #ffc107; color: #000; }
+        .btn-warning:hover { background: #e0a800; }
+        .btn-warning.active { background: #ff8c00; box-shadow: 0 0 10px rgba(255,140,0,0.5); }
         .stats { margin-bottom: 20px; display: flex; gap: 20px; flex-wrap: wrap; }
         .stat-box { background: #f8f9fa; padding: 15px; border-radius: 5px; flex: 1; min-width: 200px; text-align: center; border-left: 4px solid #007bff; }
         .stat-box.debourser { border-left-color: #28a745; }
         .stat-box.rembourse { border-left-color: #17a2b8; }
         .stat-box.difference { border-left-color: #dc3545; }
+        .stat-box.non-rembourse { border-left-color: #ffc107; }
         .stat-box h3 { margin: 0; color: #333; font-size: 2em; }
         .stat-box p { margin: 5px 0 0 0; color: #666; font-weight: bold; }
         .error { background: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
@@ -51,19 +56,14 @@
         .action-edit:hover { color: #0056b3; }
         .action-delete { color: #dc3545; font-weight: 500; }
         .action-delete:hover { color: #c82333; }
+        .filter-info { background: #fff3cd; color: #856404; padding: 10px; border-radius: 5px; margin-bottom: 15px; border-left: 4px solid #ffc107; }
         @media print { .filters, .shortcuts, .actions, .stats, .no-print, .top-nav { display: none; } }
-        @media (max-width: 768px) { 
-            .shortcuts { flex-direction: column; } 
-            .stats { flex-direction: column; } 
-            table { font-size: 0.8em; }
-            .top-nav { flex-direction: column; gap: 10px; }
-            .nav-links { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-            .user-menu { margin-left: 0; justify-content: center; width: 100%; }
-        }
+        @media (max-width: 768px) { .shortcuts { flex-direction: column; } .stats { flex-direction: column; } table { font-size: 0.8em; } .top-nav { flex-direction: column; gap: 10px; } .nav-links { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; } .user-menu { margin-left: 0; justify-content: center; width: 100%; } }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- Navigation -->
         <div class="top-nav no-print">
             <h1>🏥 Gestion Bulletins de Soins</h1>
             <div class="nav-links">
@@ -79,6 +79,7 @@
             </div>
         </div>
         
+        <!-- Messages Session -->
         <?php if (isset($_SESSION['error'])): ?>
             <div class="error"><?= htmlspecialchars($_SESSION['error']) ?></div>
             <?php unset($_SESSION['error']); ?>
@@ -89,22 +90,36 @@
             <?php unset($_SESSION['success']); ?>
         <?php endif; ?>
 
+        <!-- Raccourcis -->
         <div class="shortcuts no-print">
             <a href="index.php?controller=slip&action=create" class="btn">📄 Nouveau Bulletin</a>
             <a href="index.php?controller=patient&action=index" class="btn btn-blue">👥 Patients</a>
             <a href="index.php?controller=doctor&action=index" class="btn btn-blue">👨‍⚕️ Médecins</a>
             <a href="index.php?controller=intervention&action=index" class="btn btn-blue">💉 Types Intervention</a>
-    
-            <!-- === LIEN EXPORT CSV CORRIGÉ === -->
-            <a href="index.php?controller=dashboard&action=exportCsv" class="btn btn-export">📊 Export CSV</a>
+            
+            <!-- === EXPORT CSV - LIEN CORRIGÉ (sans http_build_query) === -->
+            <form method="get" action="index.php" style="display: inline;">
+                <input type="hidden" name="controller" value="dashboard">
+                <input type="hidden" name="action" value="exportCsv">
+                <input type="hidden" name="date_debut" value="<?= htmlspecialchars($_GET['date_debut'] ?? '') ?>">
+                <input type="hidden" name="date_fin" value="<?= htmlspecialchars($_GET['date_fin'] ?? '') ?>">
+                <input type="hidden" name="doctor_id" value="<?= (int)($_GET['doctor_id'] ?? 0) ?>">
+                <input type="hidden" name="patient_id" value="<?= (int)($_GET['patient_id'] ?? 0) ?>">
+                <input type="hidden" name="search" value="<?= htmlspecialchars($_GET['search'] ?? '') ?>">
+                <input type="hidden" name="non_rembourses" value="<?= isset($_GET['non_rembourses']) ? '1' : '' ?>">
+                <button type="submit" class="btn btn-export">📊 Export CSV</button>
+            </form>
+            
             <button onclick="window.print()" class="btn btn-export">🖨️ Export PDF</button>
         </div>
 
+        <!-- Statistiques -->
         <div class="stats no-print">
             <?php
             $total_debourse = array_sum(array_column($slips ?? [], 'montant_debourse'));
             $total_rembourse = array_sum(array_column($slips ?? [], 'montant_rembourse'));
             $total_difference = $total_debourse - $total_rembourse;
+            $nb_non_rembourses = count(array_filter($slips ?? [], function($s) { return (float)($s['montant_rembourse'] ?? 0) == 0; }));
             ?>
             <div class="stat-box debourser">
                 <h3><?= number_format($total_debourse, 3, '.', ' ') ?></h3>
@@ -120,19 +135,29 @@
                 </h3>
                 <p>Total Différence</p>
             </div>
+            <div class="stat-box non-rembourse">
+                <h3 style="color: #ffc107;"><?= $nb_non_rembourses ?></h3>
+                <p>Non Remboursés</p>
+            </div>
             <div class="stat-box">
                 <h3><?= count($slips ?? []) ?></h3>
                 <p>Nombre de Bulletins</p>
             </div>
         </div>
 
+        <!-- Filtres -->
         <div class="filters no-print">
             <form method="get">
                 <input type="hidden" name="controller" value="dashboard">
                 <input type="hidden" name="action" value="index">
                 
-                <label>Date des soins :</label>
-                <input type="date" name="date" value="<?= htmlspecialchars($date ?? '') ?>">
+                <!-- === NOUVEAU : Plage de date === -->
+                <label>📅 Période :</label>
+                <div class="date-range">
+                    <input type="date" name="date_debut" value="<?= htmlspecialchars($_GET['date_debut'] ?? '') ?>" placeholder="Du">
+                    <span>au</span>
+                    <input type="date" name="date_fin" value="<?= htmlspecialchars($_GET['date_fin'] ?? '') ?>" placeholder="Au">
+                </div>
                 
                 <label>Médecin :</label>
                 <select name="doctor_id">
@@ -153,11 +178,39 @@
                 <label>Recherche :</label>
                 <input type="text" name="search" value="<?= htmlspecialchars($search ?? '') ?>" placeholder="N° Bulletin, Patient, Médecin...">
                 
-                <button type="submit" class="btn btn-blue">Filtrer</button>
+                <!-- === NOUVEAU : Bouton Non Remboursés === -->
+                <label>&nbsp;</label>
+                <button type="submit" name="non_rembourses" value="1" class="btn btn-warning <?= (isset($_GET['non_rembourses']) && $_GET['non_rembourses'] === '1') ? 'active' : '' ?>">
+                    ⚠️ Non Remboursés
+                </button>
+                
+                <button type="submit" class="btn btn-blue">🔍 Filtrer</button>
                 <a href="index.php?controller=dashboard&action=index" class="btn btn-danger">Réinitialiser</a>
             </form>
         </div>
 
+        <!-- === INFO FILTRE NON REMBOURSÉS === -->
+        <?php if (isset($_GET['non_rembourses']) && $_GET['non_rembourses'] === '1'): ?>
+        <div class="filter-info no-print">
+            <strong>⚠️ Filtre actif :</strong> Affichage des bulletins <strong>non remboursés</strong> uniquement (montant remboursé = 0)
+            <a href="index.php?controller=dashboard&action=index" style="float: right; color: #856404;">✖ Désactiver</a>
+        </div>
+        <?php endif; ?>
+
+        <!-- === INFO FILTRE DATE === -->
+        <?php if (!empty($_GET['date_debut']) || !empty($_GET['date_fin'])): ?>
+        <div class="filter-info no-print">
+            <strong>📅 Période :</strong>
+            <?php if (!empty($_GET['date_debut'])): ?>
+                Du <?= date('d/m/Y', strtotime($_GET['date_debut'])) ?>
+            <?php endif; ?>
+            <?php if (!empty($_GET['date_fin'])): ?>
+                Au <?= date('d/m/Y', strtotime($_GET['date_fin'])) ?>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
+        <!-- Tableau des bulletins -->
         <table id="dataTable">
             <thead>
                 <tr>
@@ -176,17 +229,18 @@
                 <?php if (!empty($slips)): ?>
                     <?php foreach ($slips as $s): ?>
                     <?php
-                    $difference = (float)$s['montant_debourse'] - (float)$s['montant_rembourse'];
+                    $difference = (float)($s['montant_debourse'] ?? 0) - (float)($s['montant_rembourse'] ?? 0);
                     $diff_class = $difference > 0 ? 'positive' : ($difference < 0 ? 'negative' : 'zero');
+                    $row_style = (float)($s['montant_rembourse'] ?? 0) == 0 ? 'background: #fff3cd;' : '';
                     ?>
-                    <tr>
+                    <tr style="<?= $row_style ?>">
                         <td><strong><?= htmlspecialchars($s['numero_bulletin']) ?></strong></td>
                         <td><?= htmlspecialchars($s['patient_nom']) ?></td>
                         <td><?= htmlspecialchars($s['doctor_nom']) ?></td>
-                        <td><?= $s['date_soins'] ?></td>
+                        <td><?= $s['date_soins'] ?? '' ?></td>
                         <td><?= $s['date_remboursement'] ?? '-' ?></td>
-                        <td><?= number_format((float)$s['montant_debourse'], 3, '.', ' ') ?></td>
-                        <td><?= number_format((float)$s['montant_rembourse'], 3, '.', ' ') ?></td>
+                        <td><?= number_format((float)($s['montant_debourse'] ?? 0), 3, '.', ' ') ?></td>
+                        <td><?= number_format((float)($s['montant_rembourse'] ?? 0), 3, '.', ' ') ?></td>
                         <td class="<?= $diff_class ?>"><?= number_format($difference, 3, '.', ' ') ?></td>
                         <td class="actions no-print">
                             <a href="index.php?controller=slip&action=print&id=<?= $s['id'] ?>" target="_blank" class="action-print">🖨️ Imprimer</a>
@@ -218,6 +272,7 @@
         </table>
     </div>
 
+    <!-- Script de tri -->
     <script>
         function sortTable(n) {
             var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
