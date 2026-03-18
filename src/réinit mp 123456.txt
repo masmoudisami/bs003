@@ -1,0 +1,12 @@
+# Générer un NOUVEAU hash pour '123456' sur VOTRE serveur
+NEW_HASH=$(php -r "echo password_hash('123456', PASSWORD_DEFAULT);")
+echo "Nouveau hash : $NEW_HASH"
+
+# Mettre à jour la base avec ce hash
+mysql -u root -p gestion_soins -e "UPDATE users SET password = '$NEW_HASH' WHERE username = 'sami';"
+
+# Vérifier
+mysql -u root -p gestion_soins -e "SELECT username, password FROM users;"
+
+# Tester
+php -r "require_once '/var/www/html/config/Database.php'; use App\Config\Database; \$db = Database::getInstance(); \$stmt = \$db->prepare('SELECT * FROM users WHERE username = ?'); \$stmt->execute(['sami']); \$user = \$stmt->fetch(); echo (password_verify('123456', \$user['password']) ? '✓ CONNEXION OK' : '✗ ÉCHEC') . PHP_EOL;"
